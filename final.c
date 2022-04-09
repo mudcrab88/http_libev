@@ -1,11 +1,13 @@
 #include <arpa/inet.h>
 #include <ev.h>
+#include <getopt.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #define BUFFER_SIZE 65536
@@ -126,11 +128,35 @@ void accept_cb(struct ev_loop * loop, struct ev_io * watcher, int revents) {
 
 int main(int argc, char** argv) 
 {
-    if (argc < 2) {
-        fprintf (stderr, "Too few arguments\n");
-        return 1;
+    int opt, port;
+    char * host, * dir;
+    while ((opt = getopt (argc, argv, "h:p:d:")) != -1) {
+        switch (opt) {
+            case 'h':
+                host = optarg;
+                printf ("%s\n", optarg);
+                break;
+            case 'p':
+                port = atoi(optarg);
+                printf ("%d\n", port);
+                break;
+            case 'd':                
+                dir = optarg;
+                printf ("%s\n", dir);
+                break;
+            default:
+                fprintf (stderr, "Unknown error\n");
+                return 1;
+        }
     }
-    int port = atoi(argv[1]);
+
+    if (fork() == 0) {
+        chdir(dir);
+        setsid();
+        close(0);
+        close(1);
+        close(2);
+    }
 
     struct ev_loop * loop = ev_default_loop(0);
 
