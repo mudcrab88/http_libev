@@ -22,6 +22,7 @@
 struct http_header {
     char type[255];
     char path[255];
+    char params[255];
 };
 
 void send_404(int sock) {
@@ -68,13 +69,43 @@ char * get_response(char * status, char * content) {
     strcat(response, HEADER_CONNECTION);
     strcat(response, "\n");
     strcat(response, content);
+
     return response;
 }
 
+void split_query_string(const char * query, struct http_header * header) {
+    size_t i = 0, j = 0, checked = 0;
+    bzero(header->path, strlen(header->path));
+    bzero(header->params, strlen(header->params));
+
+    //ищем path(имя файла)
+    for (i = 0; i < strlen(query); i++) {
+        if (query[i] == '?') {
+            header->path[i] = '\0';
+            j = i;
+            break;
+        } else {
+            header->path[i] = query[i];
+        }
+    }
+    //ищем params(параметры запроса)
+    for (i = 0; j < strlen(query); i++, j++) {
+        if (j == 0) {
+            header->params[i] = '\0';
+            break;
+        } else {
+            header->params[i] = query[j];
+        }
+    }
+
+    printf("%s %s %s\n", header->type, header->path, header->params);
+}
+
 void parse_http_request(const char * request, struct http_header * header) {
-    sscanf(request, "%s %s", header->type, header->path);
-    printf("%s\n", request);
-    printf("%s %s\n", header->type, header->path);
+    char query[512];
+    sscanf(request, "%s %s", header->type, query);
+    split_query_string(query, header);
+    //printf("%s\n", request);    
 }
 
 //коллбэк(чтение с клиента)
