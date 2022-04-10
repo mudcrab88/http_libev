@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <errno.h>
 #include <ev.h>
 #include <getopt.h>
 #include <netinet/in.h>
@@ -148,15 +149,7 @@ int main(int argc, char** argv)
                 fprintf (stderr, "Unknown error\n");
                 return 1;
         }
-    }
-
-    if (fork() == 0) {
-        chdir(dir);
-        setsid();
-        close(0);
-        close(1);
-        close(2);
-    }
+    }    
 
     struct ev_loop * loop = ev_default_loop(0);
 
@@ -178,7 +171,7 @@ int main(int argc, char** argv)
     bzero(&addr, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    addr.sin_addr.s_addr = inet_addr(host);
 
     bind(sd, (struct sockaddr *)&addr, sizeof(addr));
     listen(sd, SOMAXCONN);
@@ -187,6 +180,14 @@ int main(int argc, char** argv)
     struct ev_io w_accept;
     ev_io_init(&w_accept, accept_cb, sd, EV_READ);
     ev_io_start(loop, &w_accept);
+
+    printf("chroot=%d\n", chroot(dir));
+    fprintf(stderr, "Error message : %s\n", strerror(errno));
+    if (0 == daemon(0, 0)) {
+        perror("daemon");
+    } else {
+        printf("daemon start!\n");
+    }
 
     while (1) {
         ev_loop(loop, 0);
