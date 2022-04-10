@@ -98,7 +98,7 @@ void split_query_string(const char * query, struct http_header * header) {
         }
     }
 
-    printf("%s %s %s\n", header->type, header->path, header->params);
+    //printf("%s %s %s\n", header->type, header->path, header->params);
 }
 
 void parse_http_request(const char * request, struct http_header * header) {
@@ -116,7 +116,7 @@ void read_cb(struct ev_loop * loop, struct ev_io * watcher, int revents) {
     if (r < 0) {
         return;
     } else if (r == 0) {//если соединение закрыто, остановка и освобождение памяти
-        printf("Connection closed %d\n", watcher->fd);
+        //printf("Connection closed %d\n", watcher->fd);
         ev_io_stop(loop, watcher);        
         free(watcher);
         return;
@@ -151,7 +151,7 @@ void read_cb(struct ev_loop * loop, struct ev_io * watcher, int revents) {
 void accept_cb(struct ev_loop * loop, struct ev_io * watcher, int revents) {
     //подключение клиента
     int client_sd = accept(watcher->fd, 0, 0);
-    printf("Client connected %d\n", client_sd);
+    //printf("Client connected %d\n", client_sd);
     //watcher для клиента
     struct ev_io * w_client = (struct ev_io *)malloc(sizeof(struct ev_io));
     ev_io_init(w_client, read_cb, client_sd, EV_READ);
@@ -216,9 +216,9 @@ int main(int argc, char** argv)
     fprintf(stderr, "Error message : %s\n", strerror(errno));
     if (0 == daemon(0, 0)) {
         perror("daemon");
-    } else {
+    } /*else {
         printf("daemon start!\n");
-    }
+    }*/
 
     while (1) {
         ev_loop(loop, 0);
