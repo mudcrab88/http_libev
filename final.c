@@ -71,7 +71,7 @@ char * get_response(int status, char * content) {
         strcat(response, CONTENT_LENGTH_0);
         strcat(response, CONTENT_TYPE);
     } 
-    
+
     if (status == 200){
         response = (char*)malloc(sizeof(char) * strlen(content) + 100);        
         bzero(response, strlen(content) + 100);
@@ -201,9 +201,9 @@ int main(int argc, char** argv)
     listen(sd, SOMAXCONN);
 
     printf("chroot=%d\n", chroot(dir));
-    /*if (0 == daemon(0, 0)) {
+    if (0 == daemon(0, 0)) {
         perror("daemon");
-    }*/
+    }
 
     struct sockaddr_storage client_addr;
     int client_d;
