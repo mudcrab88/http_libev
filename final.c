@@ -1,6 +1,5 @@
 #include <arpa/inet.h>
 #include <errno.h>
-#include <ev.h>
 #include <getopt.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -13,11 +12,12 @@
 
 #define BUFFER_SIZE 65536
 #define METHOD_GET "GET"
-#define STATUS_OK "HTTP/1.1 200 OK\r\n"
-#define STATUS_NOT_FOUND "HTTP/1.1 404 Not Found\r\n"
-#define HEADER_CONTENT "Content-Type: text/html;\r\n"
+#define STATUS_OK "HTTP/1.0 200 OK\r\n"
+#define STATUS_NOT_FOUND "HTTP/1.0 404 NOT FOUND\r\n"
+#define CONTENT_TYPE "Content-Type: text/html;\r\n"
+#define CONTENT_LENGTH_0 "Content-length: 0\r\n"
 #define HEADER_CACHE "Cache-Control: no-cache\r\n"
-#define HEADER_CONNECTION "Connection: keep-alive\r\n"
+#define HEADER_CONNECTION "Connection: close\r\n"
 
 struct http_header {
     char type[255];
@@ -36,6 +36,7 @@ char * get_content(char * path) {
     char * filename;
     if (strcmp(path, "/") == 0) {
         filename = "index.html";
+        return NULL;
     } else {
         filename = &path[1];
     }
@@ -53,6 +54,7 @@ char * get_content(char * path) {
     
     // выделяем память под буфер
     char* buf = (char*)malloc(sizeof(char) * size);
+    bzero(buf, size);
     // читаем полностью весь файл в буфер  
     fread(buf, 1, size, file);
     fclose(file);
@@ -61,14 +63,24 @@ char * get_content(char * path) {
 }
 
 //получение ответа от сервера
-char * get_response(char * status, char * content) {
-    char * response = (char*)malloc(sizeof(char) * strlen(content) + 100);
-    strcat(response, status);
-    strcat(response, HEADER_CONTENT);
-    strcat(response, HEADER_CACHE);
-    strcat(response, HEADER_CONNECTION);
-    strcat(response, "\n");
-    strcat(response, content);
+char * get_response(int status, char * content) {
+    char * response = NULL;
+    if (status == 404) {
+        response = (char *)malloc(sizeof(char) * 100);
+        strcat(response, STATUS_NOT_FOUND);
+        strcat(response, CONTENT_LENGTH_0);
+        strcat(response, CONTENT_TYPE);
+    } 
+    
+    if (status == 200){
+        response = (char*)malloc(sizeof(char) * strlen(content) + 100);        
+        bzero(response, strlen(content) + 100);
+        strcat(response, STATUS_OK);
+        strcat(response, HEADER_CONNECTION);
+        strcat(response, CONTENT_TYPE);
+        strcat(response, "\n");
+        strcat(response, content);
+    }    
 
     return response;
 }
@@ -97,65 +109,48 @@ void split_query_string(const char * query, struct http_header * header) {
             header->params[i] = query[j];
         }
     }
-
-    //printf("%s %s %s\n", header->type, header->path, header->params);
 }
 
 void parse_http_request(const char * request, struct http_header * header) {
     char query[512];
     sscanf(request, "%s %s", header->type, query);
     split_query_string(query, header);
-    //printf("%s\n", request);    
 }
 
-//коллбэк(чтение с клиента)
-void read_cb(struct ev_loop * loop, struct ev_io * watcher, int revents) {
-    char request[BUFFER_SIZE];
-    ssize_t r = recv(watcher->fd, request, BUFFER_SIZE, MSG_NOSIGNAL);
+void send_response(int client_d, struct http_header * header) {
+    char * content = get_content(header->path); 
+    char * response;
 
-    if (r < 0) {
-        return;
-    } else if (r == 0) {//если соединение закрыто, остановка и освобождение памяти
-        //printf("Connection closed %d\n", watcher->fd);
-        ev_io_stop(loop, watcher);        
-        free(watcher);
-        return;
+    if (content == NULL) {
+        response = get_response(404, content);
     } else {
-        struct http_header header;
-        parse_http_request(request, &header);
-        
-        //принимаем только GET-запросы, иначе 404
-        char * response, * content;
-        if (strcmp(header.type, METHOD_GET) == 0) {
-            content = get_content(header.path);
-            if (content != NULL) {
-                response = get_response(STATUS_OK, content);
-            } else {
-                content = get_content("/404.html");
-                response = get_response(STATUS_NOT_FOUND, content);
-            }
-        } else {
-            content = get_content("/404.html");
-            response = get_response(STATUS_NOT_FOUND, content);
-        }
-        send(watcher->fd, response, strlen(response), MSG_NOSIGNAL);
-        free(content);
-        free(response);
-        ev_io_stop(loop, watcher);
-        close(watcher->fd);        
-        free(watcher);
+        response = get_response(200, content);
     }
+    printf("%s %s %s\n", header->type, header->path, header->params);
+
+    int len = strlen(response);
+    send(client_d, response, len, 0);
+    
+    free(content);
+    free(response);
 }
 
-//коллбэк при подключении клиента
-void accept_cb(struct ev_loop * loop, struct ev_io * watcher, int revents) {
-    //подключение клиента
-    int client_sd = accept(watcher->fd, 0, 0);
-    //printf("Client connected %d\n", client_sd);
-    //watcher для клиента
-    struct ev_io * w_client = (struct ev_io *)malloc(sizeof(struct ev_io));
-    ev_io_init(w_client, read_cb, client_sd, EV_READ);
-    ev_io_start(loop, w_client);
+void handle_request(int client_d) {
+    char request[BUFFER_SIZE];
+    struct http_header header;
+    int bytes_recvd = recv(client_d, request, BUFFER_SIZE - 1, 0);
+
+    if (bytes_recvd < 0) {
+        fprintf(stderr, "error recv\n");
+        return;
+    }
+    request[bytes_recvd] = '\0';
+
+    parse_http_request(request, &header);
+
+    if (strcmp(header.type, METHOD_GET) == 0) {
+        send_response(client_d, &header);
+    }
 }
 
 int main(int argc, char** argv) 
@@ -180,9 +175,7 @@ int main(int argc, char** argv)
                 fprintf (stderr, "Unknown error\n");
                 return 1;
         }
-    }    
-
-    struct ev_loop * loop = ev_default_loop(0);
+    }
 
     //создание сокета и установка свойств
     int sd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -207,21 +200,23 @@ int main(int argc, char** argv)
     bind(sd, (struct sockaddr *)&addr, sizeof(addr));
     listen(sd, SOMAXCONN);
 
-    //создание watcher'a
-    struct ev_io w_accept;
-    ev_io_init(&w_accept, accept_cb, sd, EV_READ);
-    ev_io_start(loop, &w_accept);
-
     printf("chroot=%d\n", chroot(dir));
-    fprintf(stderr, "Error message : %s\n", strerror(errno));
-    if (0 == daemon(0, 0)) {
+    /*if (0 == daemon(0, 0)) {
         perror("daemon");
-    } /*else {
-        printf("daemon start!\n");
     }*/
 
+    struct sockaddr_storage client_addr;
+    int client_d;
     while (1) {
-        ev_loop(loop, 0);
+        //подключение клиента
+        socklen_t s_size = sizeof(client_addr);
+        client_d = accept(sd, (struct sockaddr *)&client_addr, &s_size);
+        if(client_d == -1) {
+            fprintf(stderr, "error accept\n");
+            return -1;
+        }
+        handle_request(client_d);
+        close(client_d);
     }
 
     return 0;
