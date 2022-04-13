@@ -201,9 +201,9 @@ int main(int argc, char** argv)
     listen(sd, SOMAXCONN);
 
     printf("chroot=%d\n", chroot(dir));
-    /*if (0 == daemon(0, 0)) {
+    if (0 == daemon(0, 0)) {
         perror("daemon");
-    }*/
+    }
 
     struct sockaddr_storage client_addr;
     int client_d;
