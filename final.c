@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <getopt.h>
 #include <netinet/in.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -153,6 +154,12 @@ void handle_request(int client_d) {
     }
 }
 
+void * thread_handle_request(void * arg) {
+	int client_d = *((int *)arg);
+    handle_request(client_d);
+	return 0;
+}
+
 int main(int argc, char** argv) 
 {
     int opt, port;
@@ -207,6 +214,7 @@ int main(int argc, char** argv)
 
     struct sockaddr_storage client_addr;
     int client_d;
+    pthread_t thread;
     while (1) {
         //подключение клиента
         socklen_t s_size = sizeof(client_addr);
@@ -215,7 +223,9 @@ int main(int argc, char** argv)
             fprintf(stderr, "error accept\n");
             return -1;
         }
-        handle_request(client_d);
+        pthread_create(&thread, 0, &thread_handle_request, (void *)(&client_d));
+        pthread_join(thread, 0);
+        //handle_request(client_d);
         close(client_d);
     }
 
